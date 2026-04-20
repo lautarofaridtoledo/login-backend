@@ -46,8 +46,11 @@ export class AuthService {
     return this.tokensService.refreshAccessToken(oldRefreshToken);
   }
 
-  async logout(refreshToken: string): Promise<void> {
-    await this.tokensService.revokeRefreshToken(refreshToken);
+  async logout(accessToken: string, refreshToken?: string): Promise<void> {
+    await this.tokensService.blacklistAccessToken(accessToken);
+    if (refreshToken) {
+      await this.tokensService.revokeRefreshToken(refreshToken);
+    }
   }
 
   async verify(accessToken: string): Promise<{ valid: true; user: AuthUser }> {

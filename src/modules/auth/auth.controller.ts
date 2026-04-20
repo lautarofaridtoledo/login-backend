@@ -9,6 +9,7 @@ import {
   HttpStatus,
   UseGuards,
   Headers,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -89,17 +90,17 @@ export class AuthController {
     };
   }
 
-  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
+    @Headers('authorization') authorization?: string,
   ): Promise<ApiSuccessResponse<{ loggedOut: true }>> {
-    const token = this.cookieHelper.extractRefreshToken(req);
-    if (token) {
-      await this.authService.logout(token);
-    }
+    const accessToken = this.extractBearerToken(authorization);
+    const refreshToken = this.cookieHelper.extractRefreshToken(req);
+
+    await this.authService.logout(accessToken, refreshToken);
     this.cookieHelper.clearRefreshToken(res);
 
     return { success: true, data: { loggedOut: true } };
@@ -139,5 +140,18 @@ export class AuthController {
   ): Promise<ApiSuccessResponse<{ passwordUpdated: true }>> {
     await this.authService.resetPassword(dto.token, dto.password);
     return { success: true, data: { passwordUpdated: true } };
+  }
+
+  private extractBearerToken(authorization?: string): string {
+    if (!authorization?.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Authorization bearer token is required');
+    }
+
+    const token = authorization.slice('Bearer '.length).trim();
+    if (!token) {
+      throw new UnauthorizedException('Authorization bearer token is required');
+    }
+
+    return token;
   }
 }

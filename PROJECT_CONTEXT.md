@@ -164,6 +164,37 @@ After the schema was pushed, register failed during token generation with `TypeE
 
 - Decide later whether to keep the localized import fix or move the project to `esModuleInterop` for cleaner ESM-style imports.
 
+### 2026-04-15 - Redis Blacklist For Access Token Logout
+
+**Issue**
+
+The logout flow revoked only the refresh token. Access tokens remained valid until their JWT expiration, which meant protected routes could still be accessed briefly after logout.
+
+**Action**
+
+- Added Redis as infrastructure for access-token revocation.
+- Introduced a Redis-backed blacklist keyed by JWT `jti`.
+- Updated access-token issuance to include a unique `jti` claim.
+- Changed `POST /api/auth/logout` to require the current bearer token and blacklist it immediately.
+- Updated JWT validation to reject blacklisted access tokens before loading the user.
+- Added a local Redis Docker Compose file for development.
+
+**Outcome**
+
+- Access tokens can now be invalidated immediately on logout instead of relying only on natural expiration.
+- Redis stores each revoked token identifier with a TTL equal to the token's remaining lifetime.
+- Protected routes now depend on both JWT validity and blacklist status.
+
+**Impact**
+
+- Existing access tokens issued before this change and lacking `jti` revocation metadata will no longer pass protected-route validation.
+- Redis is now a required runtime dependency for successful startup and protected-route validation.
+
+**Pending**
+
+- Extend the same revocation mechanism to password reset, user deactivation, and suspicious-session handling.
+- Decide whether to add a broader per-user invalidation mechanism such as `tokenVersion` for multi-session revocation.
+
 ## Current Known State
 
 ### Working
@@ -173,6 +204,8 @@ After the schema was pushed, register failed during token generation with `TypeE
 - The local Prisma schema has been pushed to PostgreSQL, so the auth tables now exist for the current database.
 - The `ms` runtime interop issue in the token service has been fixed and verified with `pnpm build`.
 - The auth module exposes register, login, refresh, logout, verify, me, forgot-password, and reset-password endpoints.
+- Logout now blacklists the current access token in Redis by `jti`, and protected routes reject blacklisted tokens even before JWT expiry.
+- A local Redis development stack is defined in `docker-compose.redis.yml`.
 
 ### Still Open
 

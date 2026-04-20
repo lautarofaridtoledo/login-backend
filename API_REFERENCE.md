@@ -13,6 +13,7 @@
 ### Authentication
 
 - Protected endpoints require `Authorization: Bearer <access_token>`.
+- Protected endpoints also reject access tokens whose `jti` was blacklisted before their natural expiration.
 - Public endpoints bypass the global JWT guard through the `@Public()` decorator.
 - Refresh token flows use the `refresh_token` httpOnly cookie instead of a request body payload.
 
@@ -192,13 +193,17 @@ Side effects:
 
 ### POST /api/auth/logout
 
-Revokes the refresh token if present and clears the refresh token cookie.
+Requires a valid bearer access token, blacklists that access token until its original expiration time, revokes the refresh token if present, and clears the refresh token cookie.
 
 Request body:
 
 ```json
 {}
 ```
+
+Required header:
+
+- `Authorization: Bearer <access_token>`
 
 Optional cookie:
 
@@ -217,6 +222,7 @@ Success response:
 
 Side effects:
 
+- Stores the access token `jti` in Redis with TTL until the JWT expires.
 - Clears the `refresh_token` cookie.
 
 ### POST /api/auth/forgot-password

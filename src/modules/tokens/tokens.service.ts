@@ -1,11 +1,18 @@
 import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigType } from '@nestjs/config';
-import { createHash, randomBytes } from 'crypto';
-import ms = require('ms');
 import authConfig from '../../common/config/auth.config';
-import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
 import { JwtPayload, AuthTokens } from '../../types';
+import {
+  InvalidRefreshTokenError,
+  TokenLifecyclePolicy,
+} from './domain';
+import {
+  ACCESS_TOKEN_BLACKLIST,
+  AccessTokenBlacklistPort,
+  REFRESH_TOKENS_REPOSITORY,
+  RefreshTokensRepositoryPort,
+} from './ports';
 
 @Injectable()
 export class TokensService {
@@ -13,39 +20,59 @@ export class TokensService {
     private readonly jwt: JwtService,
     @Inject(authConfig.KEY)
     private readonly config: ConfigType<typeof authConfig>,
-    private readonly refreshTokensRepo: RefreshTokensRepository,
+    @Inject(REFRESH_TOKENS_REPOSITORY)
+    private readonly refreshTokensRepo: RefreshTokensRepositoryPort,
+    @Inject(ACCESS_TOKEN_BLACKLIST)
+    private readonly accessTokenBlacklist: AccessTokenBlacklistPort,
+    private readonly tokenPolicy: TokenLifecyclePolicy,
   ) {}
 
   async generateTokens(userId: string, email: string): Promise<AuthTokens & { refreshToken: string }> {
-    const expiresInMs = ms(this.config.jwt.accessExpiresIn as ms.StringValue);
-    const expiresInSec = Math.floor(expiresInMs / 1000);
+    const expiresInSec = this.tokenPolicy.getAccessTokenExpiresInSeconds();
+    const payload: JwtPayload = this.tokenPolicy.createAccessTokenPayload(userId, email);
 
     const accessToken = this.jwt.sign(
-      { sub: userId, email } as Record<string, unknown>,
+      payload,
       {
         secret: this.config.jwt.accessSecret,
         expiresIn: expiresInSec,
       },
     );
 
-    const refreshToken = randomBytes(48).toString('hex');
-    const tokenHash = this.hashToken(refreshToken);
-    const expiresAt = this.computeExpiry(this.config.jwt.refreshExpiresIn);
+    const refreshToken = this.tokenPolicy.issueRefreshToken();
 
-    await this.refreshTokensRepo.create({ tokenHash, userId, expiresAt });
+    await this.refreshTokensRepo.create({
+      tokenHash: refreshToken.tokenHash,
+      userId,
+      expiresAt: refreshToken.expiresAt,
+    });
 
     const decoded = this.jwt.decode(accessToken) as { exp: number };
     const accessTokenExpiresAt = new Date(decoded.exp * 1000).toISOString();
 
-    return { accessToken, accessTokenExpiresAt, refreshToken };
+    return {
+      accessToken,
+      accessTokenExpiresAt,
+      refreshToken: refreshToken.plainToken,
+    };
   }
 
   async refreshAccessToken(oldRefreshToken: string): Promise<AuthTokens & { refreshToken: string }> {
-    const oldHash = this.hashToken(oldRefreshToken);
+    const oldHash = this.tokenPolicy.hashRefreshToken(oldRefreshToken);
     const stored = await this.refreshTokensRepo.findByTokenHash(oldHash);
 
-    if (!stored || stored.revoked || stored.expiresAt < new Date()) {
+    if (!stored) {
       throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    try {
+      this.tokenPolicy.ensureRefreshTokenUsable(stored);
+    } catch (error) {
+      if (error instanceof InvalidRefreshTokenError) {
+        throw new UnauthorizedException(error.message);
+      }
+
+      throw error;
     }
 
     // Rotate: revoke old, issue new
@@ -54,7 +81,7 @@ export class TokensService {
   }
 
   async revokeRefreshToken(refreshToken: string): Promise<void> {
-    const hash = this.hashToken(refreshToken);
+    const hash = this.tokenPolicy.hashRefreshToken(refreshToken);
     const stored = await this.refreshTokensRepo.findByTokenHash(hash);
     if (stored) {
       await this.refreshTokensRepo.revoke(stored.id);
@@ -65,27 +92,22 @@ export class TokensService {
     await this.refreshTokensRepo.revokeAllForUser(userId);
   }
 
+  async blacklistAccessToken(token: string): Promise<void> {
+    const payload = this.verifyAccessToken(token);
+    if (!payload.jti || !payload.exp) {
+      throw new UnauthorizedException('Access token is missing revocation metadata');
+    }
+
+    await this.accessTokenBlacklist.blacklist(payload.jti, payload.exp);
+  }
+
+  async isAccessTokenBlacklisted(jti: string): Promise<boolean> {
+    return this.accessTokenBlacklist.isBlacklisted(jti);
+  }
+
   verifyAccessToken(token: string): JwtPayload {
     return this.jwt.verify<JwtPayload>(token, {
       secret: this.config.jwt.accessSecret,
     });
-  }
-
-  private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
-  }
-
-  private computeExpiry(expiresIn: string): Date {
-    const match = expiresIn.match(/^(\d+)([smhd])$/);
-    if (!match) return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const num = parseInt(match[1], 10);
-    const unit = match[2];
-    const ms: Record<string, number> = {
-      s: 1000,
-      m: 60 * 1000,
-      h: 60 * 60 * 1000,
-      d: 24 * 60 * 60 * 1000,
-    };
-    return new Date(Date.now() + num * (ms[unit] ?? 1000));
   }
 }
