@@ -20,7 +20,7 @@ import { AuthModule } from './modules/auth';
       useFactory: (config: ConfigType<typeof authConfig>) => ({
         throttlers: [
           {
-            ttl: config.throttle.ttl * 1000, // ThrottlerModule v6 espera ms
+            ttl: config.throttle.ttlMs,
             limit: config.throttle.limit,
           },
         ],

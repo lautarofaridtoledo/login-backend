@@ -19,7 +19,8 @@ export default registerAs('auth', () => ({
     sameSite: 'lax' as const,
   },
   throttle: {
-    ttl: parseInt(process.env.THROTTLE_TTL ?? '60', 10),
+    // THROTTLE_TTL is expected in seconds; stored here as milliseconds for ThrottlerModule
+    ttlMs: parseInt(process.env.THROTTLE_TTL ?? '60', 10) * 1000,
     limit: parseInt(process.env.THROTTLE_LIMIT ?? '10', 10),
   },
 }));

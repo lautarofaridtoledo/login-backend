@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies';
@@ -11,6 +12,7 @@ import { ThrottleAuthGuard } from '../../common/guards';
 
 @Module({
   imports: [
+    ThrottlerModule,
     UsersModule,
     TokensModule,
     PasswordResetModule,
