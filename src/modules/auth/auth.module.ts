@@ -7,6 +7,7 @@ import { TokensModule } from '../tokens';
 import { PasswordResetModule } from '../password-reset';
 import { ProvidersModule } from '../providers';
 import { SecurityModule } from '../../common/security';
+import { ThrottleAuthGuard } from '../../common/guards';
 
 @Module({
   imports: [
@@ -17,6 +18,6 @@ import { SecurityModule } from '../../common/security';
     SecurityModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, ThrottleAuthGuard],
 })
 export class AuthModule {}
