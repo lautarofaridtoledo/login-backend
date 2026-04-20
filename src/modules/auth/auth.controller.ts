@@ -15,7 +15,7 @@ import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
 import { CookieHelper } from '../../common/security';
-import { JwtAuthGuard } from '../../common/guards';
+import { JwtAuthGuard, ThrottleAuthGuard } from '../../common/guards';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthUser, ApiSuccessResponse } from '../../types';
@@ -46,6 +46,7 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottleAuthGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -123,6 +124,7 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottleAuthGuard)
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigType } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { appConfig, authConfig, databaseConfig, redisConfig } from './common/config';
 import { DatabaseModule } from './common/database';
 import { GlobalExceptionFilter } from './common/filters';
@@ -13,6 +14,17 @@ import { AuthModule } from './modules/auth';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [appConfig, authConfig, databaseConfig, redisConfig],
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [authConfig.KEY],
+      useFactory: (config: ConfigType<typeof authConfig>) => ({
+        throttlers: [
+          {
+            ttl: config.throttle.ttl * 1000, // ThrottlerModule v6 espera ms
+            limit: config.throttle.limit,
+          },
+        ],
+      }),
     }),
     DatabaseModule,
     RedisModule,
