@@ -11,11 +11,12 @@ import {
   Headers,
   UnauthorizedException,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
 import { CookieHelper } from '../../common/security';
-import { JwtAuthGuard, ThrottleAuthGuard } from '../../common/guards';
+import { JwtAuthGuard } from '../../common/guards';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthUser, ApiSuccessResponse } from '../../types';
@@ -46,7 +47,6 @@ export class AuthController {
   }
 
   @Public()
-  @UseGuards(ThrottleAuthGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -65,6 +65,7 @@ export class AuthController {
   }
 
   @Public()
+  @SkipThrottle()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
@@ -91,6 +92,7 @@ export class AuthController {
     };
   }
 
+  @SkipThrottle()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(
@@ -107,6 +109,7 @@ export class AuthController {
     return { success: true, data: { loggedOut: true } };
   }
 
+  @SkipThrottle()
   @Get('verify')
   @UseGuards(JwtAuthGuard)
   async verify(
@@ -115,6 +118,7 @@ export class AuthController {
     return { success: true, data: { valid: true, user } };
   }
 
+  @SkipThrottle()
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async me(
@@ -124,7 +128,6 @@ export class AuthController {
   }
 
   @Public()
-  @UseGuards(ThrottleAuthGuard)
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(

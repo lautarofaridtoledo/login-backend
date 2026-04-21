@@ -5,7 +5,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { appConfig, authConfig, databaseConfig, redisConfig } from './common/config';
 import { DatabaseModule } from './common/database';
 import { GlobalExceptionFilter } from './common/filters';
-import { JwtAuthGuard } from './common/guards';
+import { JwtAuthGuard, ThrottleAuthGuard } from './common/guards';
 import { RedisModule } from './common/redis';
 import { AuthModule } from './modules/auth';
 
@@ -33,6 +33,7 @@ import { AuthModule } from './modules/auth';
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: ThrottleAuthGuard },
   ],
 })
 export class AppModule {}
